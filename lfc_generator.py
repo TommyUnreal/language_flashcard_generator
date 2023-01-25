@@ -2,7 +2,7 @@
 
 Unfortunately, you have to cut them yourself :).
 You can set how many cards you need fit to one page base on your needs.
-Just navigate to main part of script na change following variables:
+You can change following variables using the command line parameters:
     target_language: Language you are going to learn. Any language supported
     by google translate is supported. however, I cannot guarantee the quality
     of the translation, as it is done by a robot. To learn available codes go
@@ -20,13 +20,14 @@ Just navigate to main part of script na change following variables:
         will be rounded up to fully cover all pages.
 
 TODO:
-    Configuration should be available via command line parameters.
     Functionality for custom fonts.
     Provide lemma corpus in additional languages.
     Executable file for various platforms.
 """
 
 import os
+import sys
+import argparse
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -35,7 +36,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from googletrans import Translator
-
+from tqdm import tqdm
 
 class LFCGenerator():
     """Language flashcards class wrapper."""
@@ -81,10 +82,14 @@ class LFCGenerator():
                 rounded to full pages.
         """
         input_file = f"lemmas/lemmas_{language}.txt"
-        with open(os.path.join(cls.location, input_file), 'r', encoding="utf-8") as file:
-            lines = [line.strip() for line in file.readlines()]
+        try:
+            with open(os.path.join(cls.location, input_file), 'r', encoding="utf-8") as file:
+                lines = [line.strip() for line in file.readlines()]
+        except Exception:
+            sys.exit(f"ERROR: Failed to read {input_file}! Please check file availability.")
 
-        no_words = ((size // per_page) + 1) * per_page
+        # limit maximum words to corpus size
+        no_words = min(((size // per_page) + 1) * per_page, ((len(lines) // per_page)) * per_page)
         return lines[:no_words]
 
     def translate(self, words_list:list) -> list:
@@ -98,7 +103,7 @@ class LFCGenerator():
         """
         translator = Translator()
         translated_words = []
-        for word in words_list:
+        for word in tqdm(words_list, total = len(words_list), desc=f"{'Translating words':>20}"):
             translation = translator.translate(word, dest=self.target_language, src=self.source_language)
             translated_words.append(f"{translation.text}")
 
@@ -139,10 +144,11 @@ class LFCGenerator():
 
         return(table)
 
-    def print_progress(self):
+    def print_progress(self, progress_bar:tqdm):
         """Count number of generated pages and print it into console."""
         self.current_page += 1
-        print(f"Working on page number {self.current_page}...")
+        progress_bar.update(1)
+        progress_bar.refresh()
 
     def create_pdf(self):
         """Create final pdf from generated pages.
@@ -165,15 +171,19 @@ class LFCGenerator():
         self.current_page = 0
         pages = []
 
+        per_page = self.rows * self.cols
+        no_words = ((size // per_page) + 1) * per_page
+        total_pages = (no_words // per_page) * 2
+        progress_bar = tqdm(range(total_pages), total=total_pages, desc=f"{'Generating pdf pages':>20}")
 
-        while words_printed < size:
+        while words_printed < len(words):
             # create a table with the matrix of boxes
-            self.print_progress()
+            self.print_progress(progress_bar)
             words_slice = words[words_printed:words_printed+(self.rows*self.cols)]
             data_source = [[words_slice[j+i*self.cols] for j in range(self.cols)] for i in range(self.rows)]
             pages.append(self.generate_table(data_source, True))
 
-            self.print_progress()
+            self.print_progress(progress_bar)
             words_slice = self.translate(words_slice)
             data_target = [[words_slice[j+i*self.cols] for j in range(self.cols)] for i in range(self.rows)]
             data_target = [row[::-1] for row in data_target]
@@ -184,10 +194,30 @@ class LFCGenerator():
         doc.build(pages)
 
 if __name__ == "__main__":
-    target_language = "en"
-    source_language = "cs"
-    rows = 6
-    cols = 4
-    size = 250
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("-t", "--target_language", default="en", help="Language you are going to learn")
+    parser.add_argument("-s", "--source_language", default="cs", help="Language you know")
+    parser.add_argument("-r", "--rows", default=6, help="Number of rows on one page")
+    parser.add_argument("-c", "--cols", default=4, help="Number of columns on one page")
+    parser.add_argument("-w", "--word_count", default=250, help="Number of words to be generated")
+
+    args = parser.parse_args()
+
+    target_language = args.target_language
+    source_language = args.source_language
+    try:
+        rows = int(args.rows)
+    except:
+        sys.exit(f"ERROR: -r argument must be an integer!")
+    try:
+        cols = int(args.cols)
+    except:
+        sys.exit(f"ERROR: -c argument must be an integer!")
+    try:
+        size = int(args.word_count)
+    except:
+        sys.exit(f"ERROR: -w argument must be an integer!") 
+
     generator = LFCGenerator(target_language, source_language, rows, cols, size)
     generator.create_pdf()

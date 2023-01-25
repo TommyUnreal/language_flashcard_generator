@@ -50,11 +50,11 @@ class LFCGenerator():
         """Constructor method, prints lemma corpus source and loads font.
 
         Args:
-            target_language (str): _description_
-            source_language (str): _description_
-            rows (int): _description_
-            cols (int): _description_
-            size (int): _description_
+            target_language (str): Target language code. F.e. "da" for Danish
+            source_language (str): Source language code. F.e. "cs" for Czech
+            rows (int): Number of rows on each page.
+            cols (int): Number of columns on each page.
+            size (int): Number of requested words in the document.
         """
         for lang, url in self.lemmas_urls:
             print(f"The {lang} lemma corpus is provided by {url}.")
@@ -208,15 +208,15 @@ if __name__ == "__main__":
     source_language = args.source_language
     try:
         rows = int(args.rows)
-    except:
+    except ValueError:
         sys.exit(f"ERROR: -r argument must be an integer!")
     try:
         cols = int(args.cols)
-    except:
+    except ValueError:
         sys.exit(f"ERROR: -c argument must be an integer!")
     try:
         size = int(args.word_count)
-    except:
+    except ValueError:
         sys.exit(f"ERROR: -w argument must be an integer!") 
 
     generator = LFCGenerator(target_language, source_language, rows, cols, size)
